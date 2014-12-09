@@ -37,15 +37,7 @@ class MultipleCouponsNotAllowedException(InvalidCartItem):
     pass
 
 
-class RegCodeAlreadyExistException(InvalidCartItem):
-    pass
-
-
-class ItemNotAllowedToRedeemRegCodeException(InvalidCartItem):
-    pass
-
-
-class ItemDoesNotExistAgainstRegCodeException(InvalidCartItem):
+class ItemNotDeletableException(InvalidCartItem):
     pass
 
 

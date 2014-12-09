@@ -44,11 +44,7 @@ from .exceptions import (
     AlreadyEnrolledInCourseException,
     CourseDoesNotExistException,
     MultipleCouponsNotAllowedException,
-    RegCodeAlreadyExistException,
-    ItemDoesNotExistAgainstRegCodeException,
-    ItemNotAllowedToRedeemRegCodeException,
-    InvalidStatusToRetire,
-    UnexpectedOrderItemStatus,
+    ItemNotDeletableException,
 )
 
 from microsite_configuration import microsite
@@ -552,6 +548,29 @@ class Order(models.Model):
         for item in self.orderitem_set.all():  # pylint: disable=no-member
             item.retire()
 
+    def remove_cart_item(self, course_id, remove_only_if_item_qty_is_1=False):
+        """
+        course_id: Course id of the item to remove
+        remove_only_if_item_qty_is_1:
+            If set to True,
+              will remove the item when qty is 1, otherwise it will raise the ItemNotDeletableException exception
+            if set to False,
+              will delete the item anyway.
+        Removes item from the cart given a course_id
+        Returns True if the item was found and False otherwise.
+        """
+        cart_items = OrderItem.objects.filter(order=self).select_subclasses()
+        item_in_cart = False
+        for item in cart_items:
+            if getattr(item, 'course_id', None) is not None:
+                if item.course_id == course_id:
+                    # Don't delete if remove_only_if_item_qty_is_1 is True and the item qty is greater than 1
+                    if remove_only_if_item_qty_is_1 and item.qty > 1:
+                        raise ItemNotDeletableException
+                    item_in_cart = True
+                    item.delete()
+        return item_in_cart
+
 
 class OrderItem(TimeStampedModel):
     """
@@ -755,53 +774,17 @@ class RegistrationCodeRedemption(models.Model):
     """
     This model contains the registration-code redemption info
     """
-    order = models.ForeignKey(Order, db_index=True, null=True)
     registration_code = models.ForeignKey(CourseRegistrationCode, db_index=True)
     redeemed_by = models.ForeignKey(User, db_index=True)
     redeemed_at = models.DateTimeField(default=datetime.now(pytz.utc), null=True)
 
     @classmethod
-    def delete_registration_redemption(cls, user, cart):
+    def is_registration_code_redeemed(cls, course_reg_code):
         """
-        This method delete registration redemption
+        Checks the existence of the registration code
+        in the RegistrationCodeRedemption
         """
-        reg_code_redemption = cls.objects.filter(redeemed_by=user, order=cart)
-        if reg_code_redemption:
-            reg_code_redemption.delete()
-            log.info('Registration code redemption entry removed for user {0} for order {1}'.format(user, cart.id))
-
-    @classmethod
-    def add_reg_code_redemption(cls, course_reg_code, order):
-        """
-        add course registration code info into RegistrationCodeRedemption model
-        """
-        cart_items = order.orderitem_set.all().select_subclasses()
-
-        for item in cart_items:
-            if getattr(item, 'course_id'):
-                if item.course_id == course_reg_code.course_id:
-                    # If the item qty is greater than 1 then the registration code should not be allowed to
-                    # redeem
-                    if item.qty > 1:
-                        raise ItemNotAllowedToRedeemRegCodeException
-                    # If another account tries to use a existing registration code before the student checks out, an
-                    # error message will appear.The reg code is un-reusable.
-                    code_redemption = cls.objects.filter(registration_code=course_reg_code)
-                    if code_redemption:
-                        log.exception("Registration code '{0}' already used".format(course_reg_code.code))
-                        raise RegCodeAlreadyExistException
-
-                    code_redemption = RegistrationCodeRedemption(registration_code=course_reg_code, order=order, redeemed_by=order.user)
-                    code_redemption.save()
-                    item.list_price = item.unit_cost
-                    item.unit_cost = 0
-                    item.save()
-                    log.info("Code '{0}' is used by user {1} against order id '{2}' "
-                             .format(course_reg_code.code, order.user.username, order.id))
-                    return course_reg_code
-
-        log.warning("Course item does not exist against registration code '{0}'".format(course_reg_code.code))
-        raise ItemDoesNotExistAgainstRegCodeException
+        return cls.objects.filter(registration_code=course_reg_code).exists()
 
     @classmethod
     def create_invoice_generated_registration_redemption(cls, course_reg_code, user):
