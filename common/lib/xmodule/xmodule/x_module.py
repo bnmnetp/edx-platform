@@ -1316,6 +1316,7 @@ class DescriptorSystem(MetricsMixin, ConfigurableFragmentWrapper, Runtime):  # p
         block.add_xml_to_node(child)
 
     def publish(self, block, event_type, event):
+        # A stub publish method that doesn't emit any events from XModuleDescriptors.
         pass
 
 
