@@ -286,7 +286,7 @@ class XModuleMixin(XBlockMixin):
 
     @property
     def runtime(self):
-        return PureSystem(self.xmodule_runtime, self._runtime)
+        return CombinedSystem(self.xmodule_runtime, self._runtime)
 
     @runtime.setter
     def runtime(self, value):
@@ -1589,13 +1589,15 @@ class ModuleSystem(MetricsMixin, ConfigurableFragmentWrapper, Runtime):  # pylin
         pass
 
 
-class PureSystem(object):
+class CombinedSystem(object):
     """
-    A class to provide pure (non-XModule) XBlocks a single Runtime
-    interface for both the ModuleSystem and DescriptorSystem, when
-    available.
+    This class is a shim to allow both pure XBlocks and XModuleDescriptors
+    that have been bound as XModules to access both the attributes of ModuleSystem
+    and of DescriptorSystem as a single runtime.
+    """
 
-    """
+    __slots__ = ('_module_system', '_descriptor_system')
+
     # This system doesn't override a number of methods that are provided by ModuleSystem and DescriptorSystem,
     # namely handler_url, local_resource_url, query, and resource_url.
     #
@@ -1604,8 +1606,8 @@ class PureSystem(object):
     # pylint: disable=abstract-method
     def __init__(self, module_system, descriptor_system):
         # These attributes are set directly to __dict__ below to avoid a recursion in getattr/setattr.
-        self.__dict__["_module_system"] = module_system
-        self.__dict__["_descriptor_system"] = descriptor_system
+        self._module_system = module_system
+        self._descriptor_system = descriptor_system
 
     def _get_student_block(self, block):
         """
@@ -1653,6 +1655,9 @@ class PureSystem(object):
         If the ModuleSystem is set, set the attr on it.
         Always set the attr on the DescriptorSystem.
         """
+        if name in self.__slots__:
+            return super(CombinedSystem, self).__setattr__(name, value)
+
         if self._module_system:
             setattr(self._module_system, name, value)
         setattr(self._descriptor_system, name, value)
@@ -1667,7 +1672,7 @@ class PureSystem(object):
         delattr(self._descriptor_system, name)
 
     def __repr__(self):
-        return "PureSystem({!r}, {!r})".format(self._module_system, self._descriptor_system)
+        return "CombinedSystem({!r}, {!r})".format(self._module_system, self._descriptor_system)
 
 
 class DoNothingCache(object):
