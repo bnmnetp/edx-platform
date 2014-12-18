@@ -1604,10 +1604,6 @@ class PureSystem(object):
     # pylint: disable=abstract-method
     def __init__(self, module_system, descriptor_system):
         # These attributes are set directly to __dict__ below to avoid a recursion in getattr/setattr.
-        #
-        # N.B. This doesn't call super(PureSystem, self).__init__, because it is only inheriting from
-        # ModuleSystem and DescriptorSystem to pass isinstance checks.
-        # pylint: disable=super-init-not-called
         self.__dict__["_module_system"] = module_system
         self.__dict__["_descriptor_system"] = descriptor_system
 
